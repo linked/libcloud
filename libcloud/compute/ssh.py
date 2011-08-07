@@ -131,6 +131,7 @@ class ParamikoSSHClient(BaseSSHClient):
                     'username': self.username,
                     'password': self.password,
                     'allow_agent': False,
+                    'pkey': self.key,
                     'look_for_keys': False}
 
         if self.timeout:
