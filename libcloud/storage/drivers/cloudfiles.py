@@ -17,9 +17,9 @@ import httplib
 import urllib
 
 try:
-    import json
-except:
     import simplejson as json
+except ImportError:
+    import json
 
 from libcloud.utils import read_in_chunks
 from libcloud.common.types import MalformedResponseError, LibcloudError
@@ -34,9 +34,10 @@ from libcloud.storage.types import ObjectDoesNotExistError
 from libcloud.storage.types import ObjectHashMismatchError
 from libcloud.storage.types import InvalidContainerNameError
 from libcloud.common.types import LazyList
+from libcloud.common.openstack import OpenStackBaseConnection
 
 from libcloud.common.rackspace import (
-    AUTH_HOST_US, AUTH_HOST_UK, RackspaceBaseConnection)
+    AUTH_URL_US, AUTH_URL_UK)
 
 CDN_HOST = 'cdn.clouddrive.com'
 API_VERSION = 'v1.0'
@@ -82,14 +83,14 @@ class CloudFilesResponse(Response):
 class CloudFilesRawResponse(CloudFilesResponse, RawResponse):
     pass
 
-class CloudFilesConnection(RackspaceBaseConnection):
+class CloudFilesConnection(OpenStackBaseConnection):
     """
     Base connection class for the Cloudfiles driver.
     """
 
+    auth_url = AUTH_URL_US
     responseCls = CloudFilesResponse
     rawResponseCls = CloudFilesRawResponse
-    auth_host = None
     _url_key = "storage_url"
 
     def __init__(self, user_id, key, secure=True):
@@ -109,10 +110,8 @@ class CloudFilesConnection(RackspaceBaseConnection):
         else:
             host = None
 
-        # Due to first-run authentication request, we may not have a path
-        if self.request_path:
-            action = self.request_path + action
-            params['format'] = 'json'
+        params['format'] = 'json'
+
         if method in [ 'POST', 'PUT' ]:
             headers.update({'Content-Type': 'application/json; charset=UTF-8'})
 
@@ -120,8 +119,7 @@ class CloudFilesConnection(RackspaceBaseConnection):
             action=action,
             params=params, data=data,
             method=method, headers=headers,
-            raw=raw, host=host
-        )
+            raw=raw)
 
 
 class CloudFilesUSConnection(CloudFilesConnection):
@@ -129,7 +127,7 @@ class CloudFilesUSConnection(CloudFilesConnection):
     Connection class for the Cloudfiles US endpoint.
     """
 
-    auth_host = AUTH_HOST_US
+    auth_url = AUTH_URL_US
 
 
 class CloudFilesUKConnection(CloudFilesConnection):
@@ -137,7 +135,7 @@ class CloudFilesUKConnection(CloudFilesConnection):
     Connection class for the Cloudfiles UK endpoint.
     """
 
-    auth_host = AUTH_HOST_UK
+    auth_url = AUTH_URL_UK
 
 
 class CloudFilesStorageDriver(StorageDriver):
@@ -148,6 +146,7 @@ class CloudFilesStorageDriver(StorageDriver):
     class.
     """
     name = 'CloudFiles'
+
     connectionCls = CloudFilesConnection
     hash_type = 'md5'
 

@@ -18,21 +18,26 @@ A class which handles loading the pricing files.
 """
 
 try:
-    import json
-except:
     import simplejson as json
+except ImportError:
+    import json
 
 import os.path
 from os.path import join as pjoin
 
 PRICING_FILE_PATH = 'data/pricing.json'
 
-PRICING_DATA = {
-    'compute': {},
-    'storage': {}
-}
+PRICING_DATA = {}
 
 VALID_PRICING_DRIVER_TYPES = [ 'compute', 'storage' ]
+
+def clear_pricing_data():
+    PRICING_DATA.clear()
+    PRICING_DATA.update({
+        'compute': {},
+        'storage': {},
+    })
+clear_pricing_data()
 
 def get_pricing_file_path(file_path=None):
     pricing_directory = os.path.dirname(os.path.abspath(__file__))

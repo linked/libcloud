@@ -17,30 +17,34 @@ import unittest
 import httplib
 
 from libcloud.compute.drivers.ec2 import EC2NodeDriver, EC2APSENodeDriver
-from libcloud.compute.drivers.ec2 import NimbusNodeDriver
-from libcloud.compute.drivers.ec2 import EC2APNENodeDriver, IdempotentParamError
+from libcloud.compute.drivers.ec2 import NimbusNodeDriver, EucNodeDriver
+from libcloud.compute.drivers.ec2 import EC2APNENodeDriver
+from libcloud.compute.drivers.ec2 import IdempotentParamError
 from libcloud.compute.base import Node, NodeImage, NodeSize, NodeLocation
 
 from test import MockHttp, LibcloudTestCase
 from test.compute import TestCaseMixin
 from test.file_fixtures import ComputeFileFixtures
 
-from test.secrets import EC2_ACCESS_ID, EC2_SECRET
+from test.secrets import EC2_PARAMS
+
 
 class EC2Tests(LibcloudTestCase, TestCaseMixin):
+    image_name = 'ec2-public-images/fedora-8-i386-base-v1.04.manifest.xml'
 
     def setUp(self):
         EC2MockHttp.test = self
         EC2NodeDriver.connectionCls.conn_classes = (None, EC2MockHttp)
         EC2MockHttp.use_param = 'Action'
         EC2MockHttp.type = None
-        self.driver = EC2NodeDriver(EC2_ACCESS_ID, EC2_SECRET)
+        self.driver = EC2NodeDriver(*EC2_PARAMS)
 
     def test_create_node(self):
         image = NodeImage(id='ami-be3adfd7',
-                          name='ec2-public-images/fedora-8-i386-base-v1.04.manifest.xml',
+                          name=self.image_name,
                           driver=self.driver)
-        size = NodeSize('m1.small', 'Small Instance', None, None, None, None, driver=self.driver)
+        size = NodeSize('m1.small', 'Small Instance', None, None, None, None,
+                        driver=self.driver)
         node = self.driver.create_node(name='foo', image=image, size=size)
         self.assertEqual(node.id, 'i-2ba64342')
         self.assertEqual(node.name, 'foo')
@@ -50,9 +54,10 @@ class EC2Tests(LibcloudTestCase, TestCaseMixin):
     def test_create_node_idempotent(self):
         EC2MockHttp.type = 'idempotent'
         image = NodeImage(id='ami-be3adfd7',
-                          name='ec2-public-images/fedora-8-i386-base-v1.04.manifest.xml',
+                          name=self.image_name,
                           driver=self.driver)
-        size = NodeSize('m1.small', 'Small Instance', None, None, None, None, driver=self.driver)
+        size = NodeSize('m1.small', 'Small Instance', None, None, None, None,
+                        driver=self.driver)
         token = 'testclienttoken'
         node = self.driver.create_node(name='foo', image=image, size=size,
                 ex_clienttoken=token)
@@ -64,15 +69,15 @@ class EC2Tests(LibcloudTestCase, TestCaseMixin):
         #    If you repeat the request with the same client token, but change
         #    another request parameter, Amazon EC2 returns an
         #    IdempotentParameterMismatch error.
-
         # In our case, changing the parameter doesn't actually matter since we
         # are forcing the error response fixture.
         EC2MockHttp.type = 'idempotent_mismatch'
 
         idem_error = None
+        # different count
         try:
             self.driver.create_node(name='foo', image=image, size=size,
-                    ex_mincount='2', ex_maxcount='2', # different count
+                    ex_mincount='2', ex_maxcount='2',
                     ex_clienttoken=token)
         except IdempotentParamError, e:
             idem_error = e
@@ -80,7 +85,7 @@ class EC2Tests(LibcloudTestCase, TestCaseMixin):
 
     def test_create_node_no_availability_zone(self):
         image = NodeImage(id='ami-be3adfd7',
-                          name='ec2-public-images/fedora-8-i386-base-v1.04.manifest.xml',
+                          name=self.image_name,
                           driver=self.driver)
         size = NodeSize('m1.small', 'Small Instance', None, None, None, None,
                         driver=self.driver)
@@ -105,7 +110,6 @@ class EC2Tests(LibcloudTestCase, TestCaseMixin):
     def test_list_nodes_with_name_tag(self):
         EC2MockHttp.type = 'WITH_TAGS'
         node = self.driver.list_nodes()[0]
-        public_ips = sorted(node.public_ip)
         self.assertEqual(node.id, 'i-8474834a')
         self.assertEqual(node.name, 'foobar1')
 
@@ -127,7 +131,7 @@ class EC2Tests(LibcloudTestCase, TestCaseMixin):
     def test_list_sizes(self):
         region_old = self.driver.region_name
 
-        names = [ ('ec2_us_east', 'us-east-1'),
+        names = [('ec2_us_east', 'us-east-1'),
                   ('ec2_us_west', 'us-west-1'),
                   ('ec2_eu_west', 'eu-west-1'),
                   ('ec2_ap_southeast', 'ap-southeast-1'),
@@ -241,6 +245,7 @@ class EC2Tests(LibcloudTestCase, TestCaseMixin):
         result = self.driver.ex_change_node_size(node=node, new_size=size)
         self.assertTrue(result)
 
+
 class EC2MockHttp(MockHttp):
 
     fixtures = ComputeFileFixtures('ec2')
@@ -309,27 +314,62 @@ class EC2MockHttp(MockHttp):
         body = self.fixtures.load('create_tags.xml')
         return (httplib.OK, body, {}, httplib.responses[httplib.OK])
 
+
+class EucMockHttp(EC2MockHttp):
+    fixtures = ComputeFileFixtures('ec2')
+
+    def _services_Eucalyptus_DescribeInstances(self, method, url, body,
+                                               headers):
+        return self._DescribeInstances(method, url, body, headers)
+
+    def _services_Eucalyptus_DescribeImages(self, method, url, body,
+                                            headers):
+        return self._DescribeImages(method, url, body, headers)
+
+    def _services_Eucalyptus_DescribeAddresses(self, method, url, body,
+                                               headers):
+        return self._DescribeAddresses(method, url, body, headers)
+
+    def _services_Eucalyptus_RebootInstances(self, method, url, body,
+                                             headers):
+        return self._RebootInstances(method, url, body, headers)
+
+    def _services_Eucalyptus_TerminateInstances(self, method, url, body,
+                                                headers):
+        return self._TerminateInstances(method, url, body, headers)
+
+    def _services_Eucalyptus_RunInstances(self, method, url, body,
+                                          headers):
+        return self._RunInstances(method, url, body, headers)
+
+    def _services_Eucalyptus_CreateTags(self, method, url, body,
+                                        headers):
+        return self._CreateTags(method, url, body, headers)
+
+
 class EC2APSETests(EC2Tests):
     def setUp(self):
         EC2APSENodeDriver.connectionCls.conn_classes = (None, EC2MockHttp)
         EC2MockHttp.use_param = 'Action'
         EC2MockHttp.type = None
-        self.driver = EC2APSENodeDriver(EC2_ACCESS_ID, EC2_SECRET)
+        self.driver = EC2APSENodeDriver(*EC2_PARAMS)
+
 
 class EC2APNETests(EC2Tests):
     def setUp(self):
         EC2APNENodeDriver.connectionCls.conn_classes = (None, EC2MockHttp)
         EC2MockHttp.use_param = 'Action'
         EC2MockHttp.type = None
-        self.driver = EC2APNENodeDriver(EC2_ACCESS_ID, EC2_SECRET)
+        self.driver = EC2APNENodeDriver(*EC2_PARAMS)
+
 
 class NimbusTests(EC2Tests):
     def setUp(self):
         NimbusNodeDriver.connectionCls.conn_classes = (None, EC2MockHttp)
         EC2MockHttp.use_param = 'Action'
         EC2MockHttp.type = None
-        self.driver = NimbusNodeDriver(EC2_ACCESS_ID, EC2_SECRET,
-                host="some.nimbuscloud.com")
+        self.driver = NimbusNodeDriver(key=EC2_PARAMS[0], secret=EC2_PARAMS[1],
+                                       host='some.nimbuscloud.com')
 
     def test_ex_describe_addresses_for_node(self):
         # overridden from EC2Tests -- Nimbus doesn't support elastic IPs.
@@ -372,11 +412,32 @@ class NimbusTests(EC2Tests):
         self.assertEqual(node.extra['tags'], {'user_key0': 'user_val0', 'user_key1': 'user_val1'})
 
     def test_ex_create_tags(self):
-       # Nimbus doesn't support creating tags so this one should be a
-       # passthrough
-       node = self.driver.list_nodes()[0]
-       self.driver.ex_create_tags(node=node, tags={'foo': 'bar'})
-       self.assertExecutedMethodCount(0)
+        # Nimbus doesn't support creating tags so this one should be a
+        # passthrough
+        node = self.driver.list_nodes()[0]
+        self.driver.ex_create_tags(node=node, tags={'foo': 'bar'})
+        self.assertExecutedMethodCount(0)
+
+
+class EucTests(LibcloudTestCase, TestCaseMixin):
+    def setUp(self):
+        EucNodeDriver.connectionCls.conn_classes = (None, EucMockHttp)
+        EC2MockHttp.use_param = 'Action'
+        EC2MockHttp.type = None
+        self.driver = EucNodeDriver(key=EC2_PARAMS[0], secret=EC2_PARAMS[1],
+                                    host='some.eucalyptus.com')
+
+    def test_list_locations_response(self):
+        try:
+            self.driver.list_locations()
+        except Exception:
+            pass
+        else:
+            self.fail('Exception was not thrown')
+
+    def test_list_location(self):
+        pass
+
 
 if __name__ == '__main__':
     sys.exit(unittest.main())

@@ -24,14 +24,13 @@ from libcloud.compute.deployment import SSHKeyDeployment, ScriptDeployment
 from libcloud.compute.base import Node
 from libcloud.compute.types import NodeState, DeploymentError, LibcloudError
 from libcloud.compute.ssh import BaseSSHClient
-from libcloud.compute.drivers.ec2 import EC2NodeDriver
 from libcloud.compute.drivers.rackspace import RackspaceNodeDriver as Rackspace
 
-from test import MockHttp
-from test.file_fixtures import ComputeFileFixtures
+from test import MockHttp, XML_HEADERS
+from test.file_fixtures import ComputeFileFixtures, OpenStackFixtures
 from mock import Mock, patch
 
-from test.secrets import RACKSPACE_USER, RACKSPACE_KEY
+from test.secrets import RACKSPACE_PARAMS
 
 class MockDeployment(Deployment):
     def run(self, node, client):
@@ -43,7 +42,7 @@ class MockClient(BaseSSHClient):
         self.stderr = ''
         self.exit_status = 0
 
-    def put(self,  path, contents, chmod=755):
+    def put(self, path, contents, chmod=755):
         return contents
 
     def run(self, name):
@@ -57,7 +56,7 @@ class DeploymentTests(unittest.TestCase):
     def setUp(self):
         Rackspace.connectionCls.conn_classes = (None, RackspaceMockHttp)
         RackspaceMockHttp.type = None
-        self.driver = Rackspace(RACKSPACE_USER, RACKSPACE_KEY)
+        self.driver = Rackspace(*RACKSPACE_PARAMS)
         self.driver.features = {'create_node': ['generates_password']}
         self.node = Node(id=12345, name='test', state=NodeState.RUNNING,
                    public_ip=['1.2.3.4'], private_ip='1.2.3.5',
@@ -321,7 +320,12 @@ class DeploymentTests(unittest.TestCase):
 
 class RackspaceMockHttp(MockHttp):
 
-    fixtures = ComputeFileFixtures('rackspace')
+    fixtures = ComputeFileFixtures('openstack')
+    auth_fixtures = OpenStackFixtures()
+
+    def _v1_1__auth(self, method, url, body, headers):
+        body = self.auth_fixtures.load('_v1_1__auth.json')
+        return (httplib.OK, body, {'content-type': 'application/json; charset=UTF-8'}, httplib.responses[httplib.OK])
 
     # fake auth token response
     def _v1_0(self, method, url, body, headers):
@@ -334,24 +338,24 @@ class RackspaceMockHttp(MockHttp):
 
     def _v1_0_slug_servers_detail(self, method, url, body, headers):
         body = self.fixtures.load('v1_slug_servers_detail_deployment_success.xml')
-        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+        return (httplib.OK, body, XML_HEADERS, httplib.responses[httplib.OK])
 
     def _v1_0_slug_servers_detail_1_SECOND_DELAY(self, method, url, body, headers):
         time.sleep(1)
         body = self.fixtures.load('v1_slug_servers_detail_deployment_success.xml')
-        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+        return (httplib.OK, body, XML_HEADERS, httplib.responses[httplib.OK])
 
     def _v1_0_slug_servers_detail_TIMEOUT(self, method, url, body, headers):
         body = self.fixtures.load('v1_slug_servers_detail_deployment_pending.xml')
-        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+        return (httplib.OK, body, XML_HEADERS, httplib.responses[httplib.OK])
 
     def _v1_0_slug_servers_detail_MISSING(self, method, url, body, headers):
         body = self.fixtures.load('v1_slug_servers_detail_deployment_missing.xml')
-        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+        return (httplib.OK, body, XML_HEADERS, httplib.responses[httplib.OK])
 
     def _v1_0_slug_servers_detail_SAME_UUID(self, method, url, body, headers):
         body = self.fixtures.load('v1_slug_servers_detail_deployment_same_uuid.xml')
-        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+        return (httplib.OK, body, XML_HEADERS, httplib.responses[httplib.OK])
 
 
 if __name__ == '__main__':

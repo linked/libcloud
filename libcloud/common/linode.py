@@ -13,9 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#
-# Copy this file to secrets.py for use with provided examples
-#
+__all__ = [
+    'API_HOST',
+    'API_ROOT'
+]
 
-EC2_ACCESS_ID=''
-EC2_SECRET_KEY=''
+
+API_HOST = 'api.linode.com'
+API_ROOT = '/'
